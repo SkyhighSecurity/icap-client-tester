@@ -33,7 +33,7 @@ In the GUI you can:
 
 - Select a file (optional)
 - Enter a URL (required if no file)
-- Set ICAP server address/port and timeout (default 60 seconds)
+- Set ICAP server address/port and timeout (default 10 seconds)
 - Toggle TLS/ICAPS and cert handling
 - Choose REQMOD/RESPMOD/OPTIONS
 - Enable Preview/Early 204
@@ -69,7 +69,7 @@ python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
   --method OPTIONS --url http://example.com/
 ```
 
-Set a custom timeout (default 60 seconds):
+Set a custom timeout (default 10 seconds):
 
 ```bash
 python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \

@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 import requests
 
 class IcapClient:
-    def __init__(self, server_address, server_port, use_tls=False, accept_early_204=False, ignore_cert_errors=False, enforce_srv_cert=True, preview=None, timeout=60):
+    def __init__(self, server_address, server_port, use_tls=False, accept_early_204=False, ignore_cert_errors=False, enforce_srv_cert=True, preview=None, timeout=10):
         self.server_address = server_address
         self.server_port = server_port
         self.use_tls = use_tls
@@ -356,7 +356,7 @@ class IcapGuiApp:
         tk.Entry(root, textvariable=self.server_port_var, width=5).grid(row=3, column=1, padx=180, pady=10, sticky='w')
 
         # Timeout
-        self.timeout_var = tk.IntVar(value=60)
+        self.timeout_var = tk.IntVar(value=10)
         tk.Label(root, text="Timeout (sec):").grid(row=4, column=0, padx=10, pady=3, sticky='w')
         tk.Entry(root, textvariable=self.timeout_var, width=6).grid(row=4, column=1, padx=10, pady=3, sticky='w')
 
@@ -526,7 +526,7 @@ def main():
     parser.add_argument('--accept-204', '-a', action='store_true')
     parser.add_argument('--output', '-o', type=str)
     parser.add_argument('--preview', type=int, default=None, help='Number of preview bytes')
-    parser.add_argument('--timeout', type=int, default=60, help='Socket timeout in seconds')
+    parser.add_argument('--timeout', type=int, default=10, help='Socket timeout in seconds')
     parser.add_argument('--req_method', '-r', choices=['PUT', 'POST'], default='POST')
     args = parser.parse_args()
 
