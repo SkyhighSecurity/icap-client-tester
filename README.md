@@ -41,6 +41,29 @@ In the GUI you can:
 
 ## CLI
 
+Show CLI help:
+
+```bash
+python icaptest.0.9.3.py --help
+```
+
+Available CLI switches:
+
+- `--cli`, `-c`: Run in CLI mode
+- `--file`, `-f`: File to send
+- `--url`, `-u`: URL to fetch (required if no file)
+- `--enforce-srv-cert`, `-e`: Disable URL server cert verification for URL fetches
+- `--server`, `-s`: ICAP server address (default `192.168.197.126`)
+- `--port`, `-p`: ICAP server port (default `1344`)
+- `--method`, `-m`: ICAP method: `REQMOD`, `RESPMOD`, `OPTIONS` (default `REQMOD`)
+- `--tls`, `-t`: Enable TLS/ICAPS
+- `--ignore-cert-errors`, `-i`: Ignore ICAP server cert errors
+- `--accept-204`, `-a`: Accept early 204 responses
+- `--output`, `-o`: Save response to a file
+- `--preview`: Number of preview bytes
+- `--timeout`: Socket timeout in seconds (default `10`)
+- `--req_method`, `-r`: HTTP method for REQMOD content: `PUT` or `POST` (default `POST`)
+
 REQMOD with a file:
 
 ```bash
