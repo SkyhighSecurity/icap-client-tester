@@ -1,82 +1,112 @@
 # icap-client-tester
+
 A lightweight ICAP client testing script for validating ICAP servers and services.
 
- ## Quickstart
-  ```bash
-  pip install requests
-  python icaptest.0.9.3.py
+## Quickstart
 
-  ## Dependencies
+```bash
+pip install requests
+python icaptest.0.9.3.py
+```
 
-  - Python 3.x
-  - requests (for RESPMOD URL fetches)
-  - Tkinter (for GUI mode; usually included with Python)
+## Dependencies
 
-  Install requests if needed:
+- Python 3.x
+- requests (for RESPMOD URL fetches)
+- Tkinter (for GUI mode; usually included with Python)
 
-  pip install requests
+Install requests if needed:
 
-  ## GUI Mode
+```bash
+pip install requests
+```
 
-  Start the GUI:
+## GUI Mode
 
-  python icaptest.0.9.3.py
+Start the GUI:
 
-  In the GUI you can:
+```bash
+python icaptest.0.9.3.py
+```
 
-  - Select a file (optional)
-  - Enter a URL (required if no file)
-  - Set ICAP server address/port and timeout
-  - Toggle TLS/ICAPS and cert handling
-  - Choose REQMOD/RESPMOD/OPTIONS
-  - Enable Preview/Early 204
-  - Send the request and view the response
+In the GUI you can:
 
-  ## CLI
+- Select a file (optional)
+- Enter a URL (required if no file)
+- Set ICAP server address/port and timeout (default 60 seconds)
+- Toggle TLS/ICAPS and cert handling
+- Choose REQMOD/RESPMOD/OPTIONS
+- Enable Preview/Early 204
+- Send the request and view the response
 
-  REQMOD with a file:
+## CLI
 
-  python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
-    --method REQMOD --file /path/to/file.bin --url http://example.com/upload
+REQMOD with a file:
 
-  REQMOD with URL only:
+```bash
+python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
+  --method REQMOD --file /path/to/file.bin --url http://example.com/upload
+```
 
-  python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
-    --method REQMOD --url http://example.com/
+REQMOD with URL only:
 
-  RESPMOD (fetches the URL and sends response body):
+```bash
+python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
+  --method REQMOD --url http://example.com/
+```
 
-  python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
-    --method RESPMOD --url http://example.com/
+RESPMOD (fetches the URL and sends response body):
 
-  OPTIONS:
+```bash
+python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
+  --method RESPMOD --url http://example.com/
+```
 
-  python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
-    --method OPTIONS --url http://example.com/
+OPTIONS:
 
-  TLS (ICAPS) with optional ignore cert errors:
+```bash
+python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
+  --method OPTIONS --url http://example.com/
+```
 
-  python icaptest.0.9.3.py --cli --server icap.example.com --port 11344 \
-    --method REQMOD --file /path/to/file.bin --url http://example.com/upload \
-    --tls --ignore-cert-errors
+Set a custom timeout (default 60 seconds):
 
-  Preview + early 204:
+```bash
+python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
+  --method REQMOD --file /path/to/file.bin --url http://example.com/upload \
+  --timeout 30
+```
 
-  python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
-    --method REQMOD --file /path/to/file.bin --url http://example.com/upload \
-    --accept-204 --preview 1024
+TLS (ICAPS) with optional ignore cert errors:
 
-  Save response to a file:
+```bash
+python icaptest.0.9.3.py --cli --server icap.example.com --port 11344 \
+  --method REQMOD --file /path/to/file.bin --url http://example.com/upload \
+  --tls --ignore-cert-errors
+```
 
-  python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
-    --method REQMOD --file /path/to/file.bin --url http://example.com/upload \
-    --output response.txt
+Preview + early 204:
 
-  ## Supported ICAP Features
+```bash
+python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
+  --method REQMOD --file /path/to/file.bin --url http://example.com/upload \
+  --accept-204 --preview 1024
+```
 
-  - REQMOD, RESPMOD, and OPTIONS
-  - TLS/ICAPS
-  - Preview mode and early 204 handling
-  - Chunked transfer encoding for request bodies
-  - URL-based RESPMOD (fetches URL content via requests)
-  - CLI and GUI modes
+Save response to a file:
+
+```bash
+python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
+  --method REQMOD --file /path/to/file.bin --url http://example.com/upload \
+  --output response.txt
+```
+
+## Supported ICAP Features
+
+- REQMOD, RESPMOD, and OPTIONS
+- TLS/ICAPS
+- Preview mode and early 204 handling
+- Chunked transfer encoding for request bodies
+- URL-based RESPMOD (fetches URL content via requests)
+- CLI and GUI modes
+- Configurable timeout for socket operations
