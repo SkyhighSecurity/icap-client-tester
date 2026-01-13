@@ -109,4 +109,4 @@ python icaptest.0.9.3.py --cli --server 127.0.0.1 --port 1344 \
 - Chunked transfer encoding for request bodies
 - URL-based RESPMOD (fetches URL content via requests)
 - CLI and GUI modes
-- Configurable timeout for socket operations (default is 10 seconds)
+- Configurable timeout for socket operations
