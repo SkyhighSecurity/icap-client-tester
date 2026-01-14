@@ -2,6 +2,10 @@
 
 A lightweight ICAP client testing script for validating ICAP servers and services.
 
+## Disclaimer
+
+This tool is not officially supported or maintained by Security and is provided "as is" without warranties or guarantees of any kind. It is designed to be used while validating and testing against ICAP servers and services.
+
 ## Quickstart
 
 ```bash
