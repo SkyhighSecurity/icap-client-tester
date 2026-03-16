@@ -494,6 +494,8 @@ def run_cli(args):
         print(f"Error: File '{args.file}' does not exist.")
         return 1
 
+    api_key = args.api_key.strip() if args.api_key else None
+
     service_path = "/reqmod" if args.method=="REQMOD" else "/respmod"
     content = None
     
@@ -502,7 +504,7 @@ def run_cli(args):
             content = f.read()
 
     try:
-        icap_client = IcapClient(args.server, args.port, args.tls, args.accept_204, args.ignore_cert_errors, args.enforce_srv_cert, args.preview, args.timeout)
+        icap_client = IcapClient(args.server, args.port, args.tls, args.accept_204, args.ignore_cert_errors, args.enforce_srv_cert, args.preview, args.timeout, api_key)
         response = icap_client.adapt_content(content, icap_service=service_path, method=args.method, url=args.url, req_method=args.req_method)
         if response:
             if args.output:
@@ -534,6 +536,7 @@ def main():
     parser.add_argument('--output', '-o', type=str)
     parser.add_argument('--preview', type=int, default=None, help='Number of preview bytes')
     parser.add_argument('--timeout', type=int, default=60, help='Socket timeout in seconds')
+    parser.add_argument('--api-key', type=str, default=None, help='Optional API key for Authorization: Basic header')
     parser.add_argument('--req_method', '-r', choices=['PUT', 'POST'], default='POST')
     args = parser.parse_args()
 

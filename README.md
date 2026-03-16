@@ -67,6 +67,7 @@ Available CLI switches:
 - `--output`, `-o`: Save response to a file
 - `--preview`: Number of preview bytes
 - `--timeout`: Socket timeout in seconds (default `60`)
+- `--api-key`: Optional API key for `Authorization: Basic` header
 - `--req_method`, `-r`: HTTP method for REQMOD content: `PUT` or `POST` (default `POST`)
 
 REQMOD with a file:
@@ -129,6 +130,14 @@ python icaptest.0.9.4.py --cli --server 127.0.0.1 --port 1344 \
   --output response.txt
 ```
 
+REQMOD with API key (Basic auth header):
+
+```bash
+python icaptest.0.9.4.py --cli --server 127.0.0.1 --port 1344 \
+  --method REQMOD --file /path/to/file.bin --url http://example.com/upload \
+  --api-key YOUR_API_KEY_VALUE
+```
+
 ## Supported ICAP Features
 
 - REQMOD, RESPMOD, and OPTIONS
@@ -138,4 +147,4 @@ python icaptest.0.9.4.py --cli --server 127.0.0.1 --port 1344 \
 - URL-based RESPMOD (fetches URL content via requests)
 - CLI and GUI modes
 - Configurable timeout for socket operations
-- Optional Basic auth header via GUI API key field
+- Optional Basic auth header via API key in GUI and CLI
