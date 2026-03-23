@@ -5,8 +5,46 @@ import ssl
 import os
 import argparse
 import sys
+import re
+import threading
 from urllib.parse import urlparse
 import requests
+
+BASE64_LINE_RE = re.compile(r'^[A-Za-z0-9+/]+={0,2}$')
+BASE64_INLINE_RE = re.compile(r'(?<![A-Za-z0-9+/=])([A-Za-z0-9+/]{120,}={0,2})(?![A-Za-z0-9+/=])')
+DATA_URI_BASE64_RE = re.compile(r'(;base64,)([A-Za-z0-9+/=\s]{120,})', re.IGNORECASE)
+
+
+def filter_base64_output(response_text):
+    """Mask long base64 content in output to keep terminal/UI output readable."""
+    if not response_text:
+        return response_text
+
+    # Collapse long data URI base64 payloads first.
+    response_text = DATA_URI_BASE64_RE.sub(r'\1[base64 content omitted]', response_text)
+    # Then collapse other long inline base64 blobs.
+    response_text = BASE64_INLINE_RE.sub('[base64 content omitted]', response_text)
+
+    filtered_lines = []
+    for line in response_text.splitlines():
+        candidate = line.strip()
+        if len(candidate) >= 120 and len(candidate) % 4 == 0 and BASE64_LINE_RE.fullmatch(candidate):
+            if not filtered_lines or filtered_lines[-1] != "[base64 content omitted]":
+                filtered_lines.append("[base64 content omitted]")
+            continue
+        filtered_lines.append(line)
+
+    return "\n".join(filtered_lines)
+
+
+def sanitize_response_output(response):
+    """Normalize and sanitize response objects for display."""
+    if response is None:
+        return None
+    if not isinstance(response, str):
+        response = str(response)
+    return filter_base64_output(response)
+
 
 class IcapClient:
     def __init__(self, server_address, server_port, use_tls=False, accept_early_204=False, ignore_cert_errors=False, enforce_srv_cert=True, preview=None, timeout=60, api_key=None):
@@ -23,8 +61,7 @@ class IcapClient:
 
     def send_request(self, icap_method, icap_service, headers=None, body=None, http_request=None):
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(self.timeout)
+            s = socket.create_connection((self.server_address, self.server_port), timeout=self.timeout)
             if self.use_tls:
                 try:
                     context = ssl.create_default_context()
@@ -32,14 +69,11 @@ class IcapClient:
                         context.check_hostname = False
                         context.verify_mode = ssl.CERT_NONE
                     s = context.wrap_socket(s, server_hostname=self.server_address, do_handshake_on_connect=False)
-                    s.connect((self.server_address, self.server_port))
                     s.settimeout(self.timeout)
                     s.do_handshake()
                 except (socket.timeout, ssl.SSLError) as e:
                     s.close()
                     return f'TLS Connection failed: {str(e)}'
-            else:
-                s.connect((self.server_address, self.server_port))                
 
             if self.preview is not None and icap_method != 'OPTIONS':
                 headers['Preview'] = str(self.preview)
@@ -56,9 +90,13 @@ class IcapClient:
             s.close()
             return response
 
+        except socket.timeout:
+            return f"Connection timed out after {self.timeout} seconds to {self.server_address}:{self.server_port}"
+        except ConnectionRefusedError:
+            return f"Connection refused by {self.server_address}:{self.server_port}"
         except Exception as e:
             print(f"Error sending request: {e}")
-            return e
+            return f"Error sending request: {e}"
 
     def _send_chunked_body(self, s, body):
         def send_chunks(sock, data, chunk_size=1024):
@@ -82,7 +120,7 @@ class IcapClient:
                 s.sendall(b"null-body\r\n\r\n")
 
                 response = self._receive_response(s)
-                print(response)
+                print(sanitize_response_output(response))
                 if not response.startswith("ICAP/1.0 100"):
                     return response
 
@@ -107,7 +145,7 @@ class IcapClient:
 
                 # wait for continue
                 response = self._receive_response(s)
-                print(response)
+                print(sanitize_response_output(response))
                 if not response.startswith("ICAP/1.0 100"):
                     return response
 
@@ -178,7 +216,9 @@ class IcapClient:
                     pass
         except Exception as e:
             print(f"Error receiving response: {e}")
-        return data.decode('utf-8', errors='ignore')
+            if not data:
+                return f"Error receiving response: {e}"
+        return sanitize_response_output(data.decode('utf-8', errors='ignore'))
 
     def adapt_content(self, content=None, icap_service='/reqmod', method='REQMOD', url=None, req_method='POST'):
         # Initialize base headers
@@ -310,9 +350,9 @@ class IcapGuiApp:
             
     def toggle_tls(self):
         if self.tls_var.get():
-            self.server_port_var.set(11344)
+            self.server_port_var.set("11344")
         else:
-            self.server_port_var.set(1344)         
+            self.server_port_var.set("1344")
 
     def validate_preview_entry(self, *args):
         value = self.preview_entry.get()
@@ -331,7 +371,7 @@ class IcapGuiApp:
 
     def __init__(self, root):
         self.root = root
-        self.root.title("ICAP Client 0.9.4")
+        self.root.title("ICAP Client 0.9.5")
 
         self.icap_client = None
 
@@ -347,19 +387,19 @@ class IcapGuiApp:
 
         # URL input
         tk.Label(root, text="Full URL with scheme (required if no file):").grid(row=1, column=0, padx=10, pady=10, sticky='w')
-        self.url_var = tk.StringVar(value="http://www.mwginternal.com")
+        self.url_var = tk.StringVar(value="")
         tk.Entry(root, textvariable=self.url_var, width=50).grid(row=1, column=1, padx=10, pady=10, sticky='w')
 
         # ICAP server
-        self.server_address_var = tk.StringVar(value="192.168.197.126")
-        self.server_port_var = tk.IntVar(value=1344)
+        self.server_address_var = tk.StringVar(value="<FQDN or IP>")
+        self.server_port_var = tk.StringVar(value="1344")
         tk.Label(root, text="ICAP Server Address or FQDN:").grid(row=3, column=0, padx=10, pady=10, sticky='w')
         tk.Entry(root, textvariable=self.server_address_var, width=15).grid(row=3, column=1, padx=10, pady=10, sticky='w')
         tk.Label(root, text="Port:").grid(row=3, column=1, padx=150, pady=10, sticky='w')
         tk.Entry(root, textvariable=self.server_port_var, width=5).grid(row=3, column=1, padx=180, pady=10, sticky='w')
 
         # Timeout
-        self.timeout_var = tk.IntVar(value=60)
+        self.timeout_var = tk.StringVar(value="10")
         tk.Label(root, text="Timeout (sec):").grid(row=4, column=0, padx=10, pady=3, sticky='w')
         tk.Entry(root, textvariable=self.timeout_var, width=6).grid(row=4, column=1, padx=10, pady=3, sticky='w')
         self.api_key_var = tk.StringVar(value="")
@@ -373,10 +413,9 @@ class IcapGuiApp:
         self.ignore_cert_var = tk.BooleanVar(value=False)
         tk.Checkbutton(root, text="Ignore ICAP Server Certificate Errors", variable=self.ignore_cert_var).grid(row=5, column=1, padx=150, pady=3, sticky='w')
         self.tls_var.trace_add('write', lambda *args: self.toggle_tls())
-        self.toggle_tls()
 
         # Method
-        self.method_var = tk.StringVar(value="REQMOD")
+        self.method_var = tk.StringVar(value="OPTIONS")
         self.req_method_var = tk.BooleanVar(value=False)
         tk.Label(root, text="ICAP Method:").grid(row=6, column=0, padx=10, pady=10, sticky='w')
         tk.OptionMenu(root, self.method_var, "REQMOD", "RESPMOD", "OPTIONS").grid(row=6, column=1, padx=5, pady=2, sticky='w')
@@ -415,7 +454,10 @@ class IcapGuiApp:
         preview_frame.grid(row=10, column=1, padx=10, pady=10, sticky="w")
 
         # Send button
-        tk.Button(root, text="Send Request", command=self.send_request, bg='lightblue').grid(row=11, column=1, padx=5, pady=10, sticky="w")
+        self.send_button = tk.Button(root, text="Send Request", command=self.send_request, bg='lightblue')
+        self.send_button.grid(row=11, column=1, padx=5, pady=10, sticky="w")
+        self.status_var = tk.StringVar(value="Ready")
+        tk.Label(root, textvariable=self.status_var).grid(row=11, column=1, padx=120, pady=10, sticky="w")
 
         # Response display
         tk.Label(root, text="ICAP Server Response:").grid(row=12, column=0, padx=10, pady=10, sticky='nw')
@@ -436,13 +478,32 @@ class IcapGuiApp:
 
     def send_request(self):
         file_path = self.file_path.get()
-        url = self.url_var.get()
+        url = self.url_var.get().strip()
         enforce_srv_cert = self.enforce_srv_cert_var.get()
-        server_address = self.server_address_var.get()
-        server_port = self.server_port_var.get()
-        timeout = self.timeout_var.get()
+        server_address = self.server_address_var.get().strip()
+        server_port_raw = self.server_port_var.get().strip()
+        timeout_raw = self.timeout_var.get().strip()
         api_key = self.api_key_var.get().strip()
-        method = self.method_var.get()
+        method = self.method_var.get().strip()
+
+        if not method:
+            messagebox.showerror("Error", "Please select an ICAP method")
+            return
+        if not server_address or server_address == "<FQDN or IP>":
+            messagebox.showerror("Error", "ICAP server address/FQDN is required")
+            return
+        if not server_port_raw:
+            messagebox.showerror("Error", "ICAP port is required")
+            return
+        if not timeout_raw:
+            messagebox.showerror("Error", "Timeout is required")
+            return
+        try:
+            server_port = int(server_port_raw)
+            timeout = int(timeout_raw)
+        except ValueError:
+            messagebox.showerror("Error", "Port and timeout must be numeric values")
+            return
 
         service_path = "/reqmod" if method == "REQMOD" else "/respmod"
         req_method = "PUT" if self.req_method_var.get() else "POST"
@@ -466,35 +527,128 @@ class IcapGuiApp:
             messagebox.showerror("Error", "Please provide a file or a URL")
             return
 
+        if server_port <= 0:
+            messagebox.showerror("Error", "Port must be a positive number")
+            return
+        if timeout <= 0:
+            messagebox.showerror("Error", "Timeout must be a positive number")
+            return
+
+        self.send_button.config(state='disabled')
+        self.status_var.set("Sending request...")
+        self.response_text.delete(1.0, tk.END)
+        self.response_text.insert(tk.END, "Request in progress...\n")
+
+        thread = threading.Thread(
+            target=self._send_request_worker,
+            args=(
+                server_address,
+                server_port,
+                use_tls,
+                accept_early_204,
+                ignore_cert_errors,
+                enforce_srv_cert,
+                preview,
+                timeout,
+                api_key,
+                content,
+                service_path,
+                method,
+                url,
+                req_method,
+            ),
+            daemon=True,
+        )
+        thread.start()
+
+    def _send_request_worker(
+        self,
+        server_address,
+        server_port,
+        use_tls,
+        accept_early_204,
+        ignore_cert_errors,
+        enforce_srv_cert,
+        preview,
+        timeout,
+        api_key,
+        content,
+        service_path,
+        method,
+        url,
+        req_method,
+    ):
         try:
-            if timeout <= 0:
-                messagebox.showerror("Error", "Timeout must be a positive number")
-                return
-            self.icap_client = IcapClient(server_address, server_port, use_tls, accept_early_204, ignore_cert_errors, enforce_srv_cert, preview, timeout, api_key)
-            response = self.icap_client.adapt_content(content, icap_service=service_path, method=method, url=url, req_method=req_method)
-            self.response_text.delete(1.0, tk.END)
-            if response:
-                self.response_text.insert(tk.END, response)
-            else:
-                self.response_text.insert(tk.END, "Error: No response received from server. Please check server address, port, and certificate status")
+            self.icap_client = IcapClient(
+                server_address,
+                server_port,
+                use_tls,
+                accept_early_204,
+                ignore_cert_errors,
+                enforce_srv_cert,
+                preview,
+                timeout,
+                api_key,
+            )
+            response = self.icap_client.adapt_content(
+                content,
+                icap_service=service_path,
+                method=method,
+                url=url,
+                req_method=req_method,
+            )
+            sanitized_response = sanitize_response_output(response)
+            self.root.after(0, lambda: self._on_request_done(sanitized_response))
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to send request: {str(e)}")
+            self.root.after(0, lambda: self._on_request_done(f"Failed to send request: {e}"))
+
+    def _on_request_done(self, response):
+        self.send_button.config(state='normal')
+        self.status_var.set("Ready")
+        self.response_text.delete(1.0, tk.END)
+        if response:
+            self.response_text.insert(tk.END, response)
+        else:
+            self.response_text.insert(tk.END, "Error: No response received from server. Please check server address, port, and certificate status")
 
 
 def run_cli(args):
-    if not args.file and not args.url:
-        print("Error: --file or --url is required")
+    output_path = args.output
+
+    def write_cli_output(text):
+        if output_path:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(text)
+            print(f"Response saved to: {output_path}")
+        else:
+            print(text)
+
+    if not args.server:
+        write_cli_output("Error: --server is required")
+        return 1
+    if args.port is None:
+        write_cli_output("Error: --port is required")
+        return 1
+    if not args.method:
+        write_cli_output("Error: --method is required")
+        return 1
+    if args.timeout is None:
+        write_cli_output("Error: --timeout is required")
+        return 1
+    if args.method != "OPTIONS" and not args.file and not args.url:
+        write_cli_output("Error: --file or --url is required")
         return 1
 
     if args.timeout <= 0:
-        print("Error: --timeout must be a positive number")
+        write_cli_output("Error: --timeout must be a positive number")
+        return 1
+    if args.port <= 0:
+        write_cli_output("Error: --port must be a positive number")
         return 1
 
     if args.file and not os.path.isfile(args.file):
-        print(f"Error: File '{args.file}' does not exist.")
+        write_cli_output(f"Error: File '{args.file}' does not exist.")
         return 1
-
-    api_key = args.api_key.strip() if args.api_key else None
 
     service_path = "/reqmod" if args.method=="REQMOD" else "/respmod"
     content = None
@@ -504,20 +658,28 @@ def run_cli(args):
             content = f.read()
 
     try:
-        icap_client = IcapClient(args.server, args.port, args.tls, args.accept_204, args.ignore_cert_errors, args.enforce_srv_cert, args.preview, args.timeout, api_key)
-        response = icap_client.adapt_content(content, icap_service=service_path, method=args.method, url=args.url, req_method=args.req_method)
-        if response:
-            if args.output:
-                with open(args.output,'w',encoding='utf-8') as f:
-                    f.write(response)
-                print(f"Response saved to: {args.output}")
-            else:
-                print(response)
+        icap_client = IcapClient(args.server, args.port, args.tls, args.accept_204, args.ignore_cert_errors, args.enforce_srv_cert, args.preview, args.timeout, args.api_key)
+        raw_response = icap_client.adapt_content(content, icap_service=service_path, method=args.method, url=args.url, req_method=args.req_method)
+        response = sanitize_response_output(raw_response)
+        has_displayable_text = bool(
+            response and any(ch.isprintable() and not ch.isspace() for ch in response)
+        )
+        if has_displayable_text:
+            content_to_write = response
+        elif raw_response:
+            content_to_write = "[response received but content was fully filtered or non-displayable]"
         else:
-            print("Error: No response received from server.")
+            content_to_write = "Error: No response received from server."
+
+        if output_path:
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(content_to_write)
+            print(f"Response saved to: {output_path}")
+        else:
+            print(content_to_write)
         return 0
     except Exception as e:
-        print(f"Error: {e}")
+        write_cli_output(f"Error: {e}")
         return 1
 
 
@@ -527,17 +689,17 @@ def main():
     parser.add_argument('--file', '-f', type=str, help='File to send')
     parser.add_argument('--url', '-u', type=str, help='URL to fetch (required if no file)')
     parser.add_argument('--enforce-srv-cert', '-e', action='store_false')
-    parser.add_argument('--server', '-s', type=str, default='192.168.197.126')
+    parser.add_argument('--server', '-s', type=str, default=None)
     parser.add_argument('--port', '-p', type=int, default=1344)
-    parser.add_argument('--method', '-m', choices=['REQMOD','RESPMOD', 'OPTIONS'], default='REQMOD')
+    parser.add_argument('--method', '-m', choices=['REQMOD','RESPMOD', 'OPTIONS'], default='OPTIONS')
     parser.add_argument('--tls', '-t', action='store_true')
     parser.add_argument('--ignore-cert-errors', '-i', action='store_true', help='ignore ICAP server cert errors')
     parser.add_argument('--accept-204', '-a', action='store_true')
     parser.add_argument('--output', '-o', type=str)
     parser.add_argument('--preview', type=int, default=None, help='Number of preview bytes')
-    parser.add_argument('--timeout', type=int, default=60, help='Socket timeout in seconds')
-    parser.add_argument('--api-key', type=str, default=None, help='Optional API key for Authorization: Basic header')
+    parser.add_argument('--timeout', type=int, default=10, help='Socket timeout in seconds')
     parser.add_argument('--req_method', '-r', choices=['PUT', 'POST'], default='POST')
+    parser.add_argument('--api-key', type=str, default=None, help='Optional API key for Authorization header')
     args = parser.parse_args()
 
     if args.cli:
